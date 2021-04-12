@@ -69,62 +69,6 @@ fi
 # XKB config
 export XKB_CONFIG_ROOT=$RUNTIME/usr/share/X11/xkb
 
-# Give XOpenIM a chance to locate locale data.
-# This is required for text input to work in SDL2 games.
-export XLOCALEDIR=$RUNTIME/usr/share/X11/locale
-
-# Set XCursors path
-export XCURSOR_PATH=$RUNTIME/usr/share/icons
-prepend_dir XCURSOR_PATH $SNAP/data-dir/icons
-
-# Mesa Libs for OpenGL support
-append_dir LD_LIBRARY_PATH $RUNTIME/usr/lib/$ARCH/mesa
-append_dir LD_LIBRARY_PATH $RUNTIME/usr/lib/$ARCH/mesa-egl
-
-# Tell libGL and libva where to find the drivers
-export LIBGL_DRIVERS_PATH=$RUNTIME/usr/lib/$ARCH/dri
-append_dir LD_LIBRARY_PATH $LIBGL_DRIVERS_PATH
-export LIBVA_DRIVERS_PATH=$RUNTIME/usr/lib/$ARCH/dri
-
-# Set where the VDPAU drivers are located
-export VDPAU_DRIVER_PATH="/usr/lib/$ARCH/vdpau/"
-if [ -e "/var/lib/snapd/lib/gl/vdpau/libvdpau_nvidia.so" ]; then
-  export VDPAU_DRIVER_PATH="/var/lib/snapd/lib/gl/vdpau"
-  # Prevent picking VA-API (Intel/AMD) over NVIDIA VDPAU; on PRIME systems for example
-  unset LIBVA_DRIVERS_PATH
-fi
-
-# Unity7 export (workaround for https://launchpad.net/bugs/1638405)
-append_dir LD_LIBRARY_PATH $RUNTIME/usr/lib/$ARCH/libunity
-
-# Pulseaudio export
-append_dir LD_LIBRARY_PATH $RUNTIME/usr/lib/$ARCH/pulseaudio
-
-# EGL vendor files on glvnd enabled systems
-[ -d /var/lib/snapd/lib/glvnd/egl_vendor.d ] && \
-    prepend_dir __EGL_VENDOR_LIBRARY_DIRS /var/lib/snapd/lib/glvnd/egl_vendor.d
-
-# EGL vendor files
-append_dir __EGL_VENDOR_LIBRARY_DIRS $RUNTIME/etc/glvnd/egl_vendor.d
-append_dir __EGL_VENDOR_LIBRARY_DIRS $RUNTIME/usr/share/glvnd/egl_vendor.d
-
-# Tell GStreamer where to find its plugins
-export GST_PLUGIN_PATH=$SNAP/usr/lib/$ARCH/gstreamer-1.0
-export GST_PLUGIN_SYSTEM_PATH=$RUNTIME/usr/lib/$ARCH/gstreamer-1.0
-# gst plugin scanner doesn't install in the correct path: https://github.com/ubuntu/snapcraft-desktop-helpers/issues/43
-export GST_PLUGIN_SCANNER=$RUNTIME/usr/lib/$ARCH/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner
-
-# XDG Config
-[ "$WITH_RUNTIME" = yes ] && prepend_dir XDG_CONFIG_DIRS $RUNTIME/etc/xdg
-prepend_dir XDG_CONFIG_DIRS $SNAP/etc/xdg
-
-# Define snaps' own data dir
-[ "$WITH_RUNTIME" = yes ] && prepend_dir XDG_DATA_DIRS $RUNTIME/usr/share
-prepend_dir XDG_DATA_DIRS $SNAP/usr/share
-prepend_dir XDG_DATA_DIRS $SNAP/share
-prepend_dir XDG_DATA_DIRS $SNAP/data-dir
-prepend_dir XDG_DATA_DIRS $SNAP_USER_DATA
-
 # Set XDG_DATA_HOME to local path
 export XDG_DATA_HOME=$SNAP_USER_DATA/.local/share
 ensure_dir_exists $XDG_DATA_HOME -m 700
@@ -227,51 +171,6 @@ else
     fi
   done
 fi
-
-# If detect wayland server socket, then set environment so applications prefer
-# wayland, and setup compat symlink (until we use user mounts. Remember,
-# XDG_RUNTIME_DIR is /run/user/<uid>/snap.$SNAP so look in the parent directory
-# for the socket. For details:
-# https://forum.snapcraft.io/t/wayland-dconf-and-xdg-runtime-dir/186/10
-# Applications that don't support wayland natively may define DISABLE_WAYLAND
-# (to any non-empty value) to skip that logic entirely.
-wayland_available=false
-if [[ -n "$XDG_RUNTIME_DIR" && -z "$DISABLE_WAYLAND" ]]; then
-    wdisplay="wayland-0"
-    if [ -n "$WAYLAND_DISPLAY" ]; then
-        wdisplay="$WAYLAND_DISPLAY"
-    fi
-    wayland_sockpath="$XDG_RUNTIME_DIR/../$wdisplay"
-    wayland_snappath="$XDG_RUNTIME_DIR/$wdisplay"
-    if [ -S "$wayland_sockpath" ]; then
-        # if running under wayland, use it
-        #export WAYLAND_DEBUG=1
-        wayland_available=true
-        # create the compat symlink for now
-        if [ ! -e "$wayland_snappath" ]; then
-            ln -s "$wayland_sockpath" "$wayland_snappath"
-        fi
-    fi
-fi
-
-# Make PulseAudio socket available inside the snap-specific $XDG_RUNTIME_DIR
-if [ -n "$XDG_RUNTIME_DIR" ]; then
-    pulsenative="pulse/native"
-    pulseaudio_sockpath="$XDG_RUNTIME_DIR/../$pulsenative"
-    if [ -S "$pulseaudio_sockpath" ]; then
-        export PULSE_SERVER="unix:${pulseaudio_sockpath}"
-    fi
-fi
-
-# GI repository
-[ "$WITH_RUNTIME" = yes ] && prepend_dir GI_TYPELIB_PATH $RUNTIME/usr/lib/$ARCH/girepository-1.0
-[ "$WITH_RUNTIME" = yes ] && prepend_dir GI_TYPELIB_PATH $RUNTIME/usr/lib/girepository-1.0
-prepend_dir GI_TYPELIB_PATH $SNAP/usr/lib/$ARCH/girepository-1.0
-prepend_dir GI_TYPELIB_PATH $SNAP/usr/lib/girepository-1.0
-prepend_dir GI_TYPELIB_PATH $SNAP/usr/lib/gjs/girepository-1.0
-
-# Keep an array of data dirs, for looping through them
-IFS=':' read -r -a data_dirs_array <<< "$XDG_DATA_DIRS"
 
 # Font Config and themes
 export FONTCONFIG_PATH=$RUNTIME/etc/fonts
@@ -391,15 +290,10 @@ if [ -r $XDG_RUNTIME_DIR/../dconf/user ]; then
   ln -sf ../../dconf/user $XDG_RUNTIME_DIR/dconf/user
 fi
 
-# Testability support
-append_dir LD_LIBRARY_PATH $SNAP/testability
-append_dir LD_LIBRARY_PATH $SNAP/testability/$ARCH
-append_dir LD_LIBRARY_PATH $SNAP/testability/$ARCH/mesa
-
 # Gdk-pixbuf loaders
 export GDK_PIXBUF_MODULE_FILE=$XDG_CACHE_HOME/gdk-pixbuf-loaders.cache
 export GDK_PIXBUF_MODULEDIR=$RUNTIME/usr/lib/$ARCH/gdk-pixbuf-2.0/2.10.0/loaders
-if [ $needs_update = true ] || [ ! -f $GDK_PIXBUF_MODULE_FILE ]; then
+if [ ! -f $GDK_PIXBUF_MODULE_FILE ]; then
   rm -f $GDK_PIXBUF_MODULE_FILE
   if [ -f $RUNTIME/usr/lib/$ARCH/gdk-pixbuf-2.0/gdk-pixbuf-query-loaders ]; then
     async_exec $RUNTIME/usr/lib/$ARCH/gdk-pixbuf-2.0/gdk-pixbuf-query-loaders > $GDK_PIXBUF_MODULE_FILE
@@ -443,10 +337,3 @@ for f in ${gtk_configs[@]}; do
     ln -s $REALHOME/.config/$f $dest
   fi
 done
-
-# create symbolic link to ibus socket path for ibus to look up its socket files
-# (see comments #3 and #6 on https://launchpad.net/bugs/1580463)
-IBUS_CONFIG_PATH=$XDG_CONFIG_HOME/ibus
-ensure_dir_exists $IBUS_CONFIG_PATH
-[ -d $IBUS_CONFIG_PATH/bus ] && rm -rf $IBUS_CONFIG_PATH/bus
-ln -sfn $REALHOME/.config/ibus/bus $IBUS_CONFIG_PATH

@@ -29,12 +29,7 @@ function ensure_dir_exists() {
 # # We need to handle that case and reset $SNAP
 SNAP=`echo $SNAP | sed -e "s|/var/lib/snapd||g"`
 
-needs_update=true
-
-. $SNAP_USER_DATA/.last_revision 2>/dev/null || true
-if [ "$SNAP_DESKTOP_LAST_REVISION" = "$SNAP_REVISION" ]; then
-  needs_update=false
-fi
+needs_update=false
 
 # Set $REALHOME to the users real home directory
 REALHOME=`getent passwd $UID | cut -d ':' -f 6`
@@ -42,17 +37,6 @@ REALHOME=`getent passwd $UID | cut -d ':' -f 6`
 # Set config folder to local path
 export XDG_CONFIG_HOME=$SNAP_USER_DATA/.config
 ensure_dir_exists $XDG_CONFIG_HOME -m 700
-
-# If the user has modified their user-dirs settings, force an update
-if [[ -f "$XDG_CONFIG_HOME/user-dirs.dirs.md5sum" ]]; then
-  if [[ "$(md5sum < "$REALHOME/.config/user-dirs.dirs")" != "$(cat "$XDG_CONFIG_HOME/user-dirs.dirs.md5sum")" ||
-        ( -f "$XDG_CONFIG_HOME/user-dirs.locale.md5sum" &&
-          "$(md5sum < "$REALHOME/.config/user-dirs.locale")" != "$(cat "$XDG_CONFIG_HOME/user-dirs.locale.md5sum")" ) ]]; then
-    needs_update=true
-  fi
-else
-  needs_update=true
-fi
 
 if [ "$SNAP_ARCH" == "amd64" ]; then
   ARCH="x86_64-linux-gnu"
